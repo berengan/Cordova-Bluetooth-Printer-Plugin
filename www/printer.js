@@ -12,6 +12,14 @@ var printer = {
    },
    print: function(fnSuccess, fnError, str){
       exec(fnSuccess, fnError, "BluetoothPrinter", "print", [str]);
+   },
+   /*
+   printImage: function(fnSuccess, fnError, str){
+      exec(fnSuccess, fnError, "BluetoothPrinter", "printImage", [str]);
+   },
+   */
+   printBase64: function(fnSuccess, fnError, str){
+      exec(fnSuccess, fnError, "BluetoothPrinter", "printBase64", [str]);
    }
 };
 
