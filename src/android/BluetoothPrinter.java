@@ -17,6 +17,11 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import com.citizen.jpos.printer.ESCPOSPrinter;
+import com.citizen.jpos.command.ESCPOS;
+import com.citizen.port.android.BluetoothPort;
+import com.citizen.request.android.RequestHandler;
+
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothSocket;
@@ -28,12 +33,14 @@ import android.util.Log;
 
 public class BluetoothPrinter extends CordovaPlugin {
 	private static final String LOG_TAG = "BluetoothPrinter";
+	BluetoothPort bluetoothPort;
 	BluetoothAdapter mBluetoothAdapter;
 	BluetoothSocket mmSocket;
 	BluetoothDevice mmDevice;
 	OutputStream mmOutputStream;
 	InputStream mmInputStream;
 	Thread workerThread;
+	Thread hThread;
 	byte[] readBuffer;
 	int readBufferPosition;
 	int counter;
@@ -116,6 +123,7 @@ public class BluetoothPrinter extends CordovaPlugin {
 		String errMsg = null;
 		try {
 			mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+			bluetoothPort = BluetoothPort.getInstance();
 			if (mBluetoothAdapter == null) {
 				errMsg = "No bluetooth adapter available";
 				Log.e(LOG_TAG, errMsg);
@@ -124,7 +132,7 @@ public class BluetoothPrinter extends CordovaPlugin {
 			}
 			if (!mBluetoothAdapter.isEnabled()) {
 				Intent enableBluetooth = new Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE);
-				this.cordova.getActivity().startActivityForResult(enableBluetooth, 0);
+				this.cordova.getActivity().startActivityForResult(enableBluetooth, 2);
 			}
 			Set<BluetoothDevice> pairedDevices = mBluetoothAdapter.getBondedDevices();
 			if (pairedDevices.size() > 0) {
@@ -154,6 +162,7 @@ public class BluetoothPrinter extends CordovaPlugin {
 	boolean findBT(CallbackContext callbackContext, String name) {
 		try {
 			mBluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
+			bluetoothPort = BluetoothPort.getInstance();
 			if (mBluetoothAdapter == null) {
 				Log.e(LOG_TAG, "No bluetooth adapter available");
 			}
@@ -184,13 +193,15 @@ public class BluetoothPrinter extends CordovaPlugin {
 	// Tries to open a connection to the bluetooth printer device
 	boolean openBT(CallbackContext callbackContext) throws IOException {
 		try {
-			// Standard SerialPortService ID
-			UUID uuid = UUID.fromString("00001101-0000-1000-8000-00805f9b34fb");
-			mmSocket = mmDevice.createRfcommSocketToServiceRecord(uuid);
-			mmSocket.connect();
-			mmOutputStream = mmSocket.getOutputStream();
-			mmInputStream = mmSocket.getInputStream();
+			if(!bluetoothPort.isConnected()) {
+				System.err.println("Stampante connessa");
+				bluetoothPort.connect(mmDevice);
+			}
 			beginListenForData();
+/*
+			bluetoothPort = BluetoothPort.getInstance();
+*/
+
 //			Log.d(LOG_TAG, "Bluetooth Opened: " + mmDevice.getName());
 			callbackContext.success("Bluetooth Opened: " + mmDevice.getName());
 			return true;
@@ -207,12 +218,16 @@ public class BluetoothPrinter extends CordovaPlugin {
 	// we have to listen and check if a data were sent to be printed.
 	void beginListenForData() {
 		try {
-			final Handler handler = new Handler();
 			// This is the ASCII code for a newline character
 			final byte delimiter = 10;
 			stopWorker = false;
 			readBufferPosition = 0;
 			readBuffer = new byte[1024];
+
+			RequestHandler rh = new RequestHandler();				
+			hThread = new Thread(rh);
+			hThread.start();
+/*
 			workerThread = new Thread(new Runnable() {
 				public void run() {
 					while (!Thread.currentThread().isInterrupted() && !stopWorker) {
@@ -245,6 +260,7 @@ public class BluetoothPrinter extends CordovaPlugin {
 				}
 			});
 			workerThread.start();
+			*/
 		} catch (NullPointerException e) {
 			e.printStackTrace();
 		} catch (Exception e) {
@@ -305,8 +321,14 @@ public class BluetoothPrinter extends CordovaPlugin {
 	boolean sendData(CallbackContext callbackContext, String msg) throws IOException {
 		try {
 			// the text typed by the user
-			msg += "\n";
-			mmOutputStream.write(msg.getBytes());
+			//msg += "\n";
+			char ESC = ESCPOS.ESC;
+
+			ESCPOSPrinter posPtr = new ESCPOSPrinter("ISO-8859-1");
+			posPtr.printNormal(ESC+"|bCDate\n"+msg+"\n");
+			posPtr.printNormal("Lemons  40.00\n");
+
+			//mmOutputStream.write(msg.getBytes());
 			// tell the user data were sent
 //			Log.d(LOG_TAG, "Data Sent");
 			callbackContext.success("Data Sent");
