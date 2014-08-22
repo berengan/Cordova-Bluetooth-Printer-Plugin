@@ -1,4 +1,3 @@
-Cordova-Bluetooth-Printer-Plugin
-================================
+Cordova Plugin for Citizen CMP-30
+=================================
 
-Cordova Bluetooth Printer Plugin for android

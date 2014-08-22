@@ -17,8 +17,9 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import com.citizen.jpos.printer.ESCPOSPrinter;
 import com.citizen.jpos.command.ESCPOS;
+import com.citizen.jpos.printer.CMPPrint;
+import com.citizen.jpos.printer.ESCPOSPrinter;
 import com.citizen.port.android.BluetoothPort;
 import com.citizen.request.android.RequestHandler;
 
@@ -35,16 +36,9 @@ public class BluetoothPrinter extends CordovaPlugin {
 	private static final String LOG_TAG = "BluetoothPrinter";
 	BluetoothPort bluetoothPort;
 	BluetoothAdapter mBluetoothAdapter;
-	BluetoothSocket mmSocket;
 	BluetoothDevice mmDevice;
-	OutputStream mmOutputStream;
-	InputStream mmInputStream;
-	Thread workerThread;
+	ESCPOSPrinter posPtr;
 	Thread hThread;
-	byte[] readBuffer;
-	int readBufferPosition;
-	int counter;
-	volatile boolean stopWorker;
 
 	public BluetoothPrinter() {}
 
@@ -66,6 +60,15 @@ public class BluetoothPrinter extends CordovaPlugin {
 				callbackContext.error("Bluetooth Device Not Found: " + name);
 			}
 			return true;
+		} else if (action.equals("printBase64")) {
+			try {
+				String msg = args.getString(0);
+				sendDataBase64(callbackContext, msg);
+			} catch (IOException e) {
+				Log.e(LOG_TAG, e.getMessage());
+				e.printStackTrace();
+			}
+			return true;
 		} else if (action.equals("print")) {
 			try {
 				String msg = args.getString(0);
@@ -76,35 +79,25 @@ public class BluetoothPrinter extends CordovaPlugin {
 			}
 			return true;
 		} else if (action.equals("printImage")) {
-			try {
 				String filepath = args.getString(0);
+			/*
+			try {
 		File imagefile = new File(filepath);
         FileInputStream fis = null;
-
+*/
         try {
+			/*
             fis = new FileInputStream(imagefile);
 			Bitmap bitmap = BitmapFactory.decodeStream(fis);
 		    ByteArrayOutputStream stream=new ByteArrayOutputStream();
     		bitmap.compress(Bitmap.CompressFormat.PNG, 90, stream);
 		    byte[] imageBytes=stream.toByteArray();
-			sendDataBytes(callbackContext, imageBytes);
-        } catch (FileNotFoundException e) {
+			*/
+			sendDataImage(callbackContext, filepath);
+        } catch (IOException e) {
 			Log.e(LOG_TAG, e.getMessage());
             e.printStackTrace();
         }
-			} catch (IOException e) {
-				Log.e(LOG_TAG, e.getMessage());
-				e.printStackTrace();
-			}
-			return true;
-		} else if (action.equals("printBase64")) {
-			try {
-				String msg = args.getString(0);
-				sendDataBase64(callbackContext, msg);
-			} catch (IOException e) {
-				Log.e(LOG_TAG, e.getMessage());
-				e.printStackTrace();
-			}
 			return true;
 		} else if (action.equals("close")) {
 			try {
@@ -138,11 +131,6 @@ public class BluetoothPrinter extends CordovaPlugin {
 			if (pairedDevices.size() > 0) {
 				JSONArray json = new JSONArray();
 				for (BluetoothDevice device : pairedDevices) {
-//					Hashtable map = new Hashtable();
-//					map.put("type", device.getType());
-//					map.put("address", device.getAddress());
-//					map.put("name", device.getName());
-//					JSONObject jObj = new JSONObject(map);
 					json.put(device.getName());
 				}
 				callbackContext.success(json);
@@ -197,6 +185,7 @@ public class BluetoothPrinter extends CordovaPlugin {
 				System.err.println("Stampante connessa");
 				bluetoothPort.connect(mmDevice);
 			}
+			posPtr = new ESCPOSPrinter("ISO-8859-1");
 			beginListenForData();
 /*
 			bluetoothPort = BluetoothPort.getInstance();
@@ -218,49 +207,9 @@ public class BluetoothPrinter extends CordovaPlugin {
 	// we have to listen and check if a data were sent to be printed.
 	void beginListenForData() {
 		try {
-			// This is the ASCII code for a newline character
-			final byte delimiter = 10;
-			stopWorker = false;
-			readBufferPosition = 0;
-			readBuffer = new byte[1024];
-
 			RequestHandler rh = new RequestHandler();				
 			hThread = new Thread(rh);
 			hThread.start();
-/*
-			workerThread = new Thread(new Runnable() {
-				public void run() {
-					while (!Thread.currentThread().isInterrupted() && !stopWorker) {
-						try {
-							int bytesAvailable = mmInputStream.available();
-							if (bytesAvailable > 0) {
-								byte[] packetBytes = new byte[bytesAvailable];
-								mmInputStream.read(packetBytes);
-								for (int i = 0; i < bytesAvailable; i++) {
-									byte b = packetBytes[i];
-									if (b == delimiter) {
-										byte[] encodedBytes = new byte[readBufferPosition];
-										System.arraycopy(readBuffer, 0, encodedBytes, 0, encodedBytes.length);
-//										final String data = new String(encodedBytes, "US-ASCII");
-//										readBufferPosition = 0;
-//										handler.post(new Runnable() {
-//											public void run() {
-//												myLabel.setText(data);
-//											}
-//										});
-									} else {
-										readBuffer[readBufferPosition++] = b;
-									}
-								}
-							}
-						} catch (IOException ex) {
-							stopWorker = true;
-						}
-					}
-				}
-			});
-			workerThread.start();
-			*/
 		} catch (NullPointerException e) {
 			e.printStackTrace();
 		} catch (Exception e) {
@@ -269,16 +218,12 @@ public class BluetoothPrinter extends CordovaPlugin {
 	}
 
 	/*
-	 * This will send data to be printed by the bluetooth printer
+	 * This will send image to be printed by the bluetooth printer
 	 */
-	boolean sendDataBytes(CallbackContext callbackContext, byte[] msg) throws IOException {
+	boolean sendDataImage(CallbackContext callbackContext, String filepath) throws IOException {
 		try {
-			// the text typed by the user
-			// TODO: encode msg from base64
-			mmOutputStream.write(msg);
-			// tell the user data were sent
-//			Log.d(LOG_TAG, "Data Sent");
-			callbackContext.success("Data Sent");
+			posPtr.printBitmap(filepath, CMPPrint.CMP_ALIGNMENT_LEFT);
+			callbackContext.success("Image Sent");
 			return true;
 		} catch (Exception e) {
 			String errMsg = e.getMessage();
@@ -288,47 +233,32 @@ public class BluetoothPrinter extends CordovaPlugin {
 		}
 		return false;
 	}
-
-
-
-	/*
-	 * This will send data to be printed by the bluetooth printer
-	 */
-	boolean sendDataBase64(CallbackContext callbackContext, String msg) throws IOException {
-		try {
-			// the text typed by the user
-			byte[] out = Base64.decode(msg);
-//			msg += "\n";
-			System.out.println(out);
-			mmOutputStream.write(out);
-			// tell the user data were sent
-//			Log.d(LOG_TAG, "Data Sent");
-			callbackContext.success("Data Sent");
-			return true;
-		} catch (Exception e) {
-			String errMsg = e.getMessage();
-			Log.e(LOG_TAG, errMsg);
-			e.printStackTrace();
-			callbackContext.error(errMsg);
-		}
-		return false;
-	}
-
 
 	/*
 	 * This will send data to be printed by the bluetooth printer
 	 */
 	boolean sendData(CallbackContext callbackContext, String msg) throws IOException {
 		try {
-			// the text typed by the user
-			//msg += "\n";
 			char ESC = ESCPOS.ESC;
+			posPtr.printNormal(msg+"\n");
+			callbackContext.success("Data Sent");
+			return true;
+		} catch (Exception e) {
+			String errMsg = e.getMessage();
+			Log.e(LOG_TAG, errMsg);
+			e.printStackTrace();
+			callbackContext.error(errMsg);
+		}
+		return false;
+	}
 
-			ESCPOSPrinter posPtr = new ESCPOSPrinter("ISO-8859-1");
-			posPtr.printNormal(ESC+"|bCDate\n"+msg+"\n");
-			posPtr.printNormal("Lemons  40.00\n");
-
-			//mmOutputStream.write(msg.getBytes());
+	/*
+	 * This will send data to be printed by the bluetooth printer
+	 */
+	boolean sendDataBase64(CallbackContext callbackContext, String msg) throws IOException {
+		try {
+			String out = new String(Base64.decode(msg));
+			posPtr.printNormal(out+"\n");
 			// tell the user data were sent
 //			Log.d(LOG_TAG, "Data Sent");
 			callbackContext.success("Data Sent");
@@ -342,23 +272,24 @@ public class BluetoothPrinter extends CordovaPlugin {
 		return false;
 	}
 
+
 	// Close the connection to bluetooth printer.
 	boolean closeBT(CallbackContext callbackContext) throws IOException {
-		try {
-			stopWorker = true;
-			mmOutputStream.close();
-			mmInputStream.close();
-			mmSocket.close();
-//			myLabel.setText("Bluetooth Closed");
-			callbackContext.success("Bluetooth Closed");
-			return true;
+		try	{
+			bluetoothPort.disconnect();
 		} catch (Exception e) {
 			String errMsg = e.getMessage();
 			Log.e(LOG_TAG, errMsg);
 			e.printStackTrace();
 			callbackContext.error(errMsg);
+			return false;
 		}
-		return false;
+		if((hThread != null) && (hThread.isAlive())) {
+			hThread.interrupt();
+		}
+//			myLabel.setText("Bluetooth Closed");
+		callbackContext.success("Bluetooth Closed");
+		return true;
 	}
 }
 /*

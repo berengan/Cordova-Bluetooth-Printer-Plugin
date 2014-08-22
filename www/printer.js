@@ -15,11 +15,11 @@
 		BluetoothPrinter.prototype.print = function(fnSuccess, fnError, str){
 			exec(fnSuccess, fnError, "BluetoothPrinter", "print", [str]);
    		};
-		BluetoothPrinter.prototype.printBase64 = function(fnSuccess, fnError, str){
-			exec(fnSuccess, fnError, "BluetoothPrinter", "printBase64", [str]);
-		};
-
-        var BluetoothPrinter = new BluetoothPrinter();
+		BluetoothPrinter.prototype.printImage = function(fnSuccess, fnError, str){
+			exec(fnSuccess, fnError, "BluetoothPrinter", "printImage", [str]);
+   		};
+        
+		var BluetoothPrinter = new BluetoothPrinter();
         module.exports = BluetoothPrinter;
 
     }
